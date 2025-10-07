@@ -1,0 +1,70 @@
+This document outlines the architectural decisions and normalization strategies used to unify Gmail and Outlook behaviors across the assistant stack. The goal is to abstract away provider-specific quirks and expose a consistent interface for search, tagging, metadata extraction, and message operations.
+
+1. Label and Folder Mapping
+Gmail uses a flat label system (e.g., INBOX, STARRED, DRAFT), while Outlook relies on hierarchical folders and optional categories. To standardize:
+- Gmail labels are mapped to Outlook folders using a static dictionary.
+- Gmail-style flags like STARRED and IMPORTANT are simulated via Outlook categories.
+- Custom labels are injected as category filters using categories/any(c:c eq 'LabelName').
+
+2. Metadata Normalization
+Both providers expose different field structures. To unify:
+- id, subject, conversation_id, receivedDateTime, isRead, and hasAttachments are extracted directly.
+- from is flattened to from_name and from_address.
+- body is extracted from either body.content or bodyPreview, depending on content type.
+- categories are normalized to represent Gmail-style labels.
+
+3. Search Query Composition
+Gmail supports full-text search and label filters. Outlook Graph API requires:
+- Folder scoping via /me/mailFolders/{folder}/messages
+- Filter composition using $filter with strict syntax
+- Fallback to $search for sender + subject combinations when $filter becomes inefficient
+The GraphQueryPlanner handles:
+- Folder resolution based on label
+- Semantic filter injection (isDraft, isRead, hasAttachments)
+- Date normalization to ISO 8601 format
+- Sender and subject filtering using Graph-safe syntax
+
+4. Date Format Handling
+Gmail accepts flexible formats like YYYY/MM/DD. Outlook requires strict ISO 8601 (YYYY-MM-DDTHH:MM:SSZ). To unify:
+- A utility function converts user input to ISO format before injecting into filters.
+- Planner auto-normalizes after and before fields.
+
+5. Label Toggling
+Gmail uses modifyLabels to add/remove labels. Outlook uses PATCH /messages/{id} with categories. To simulate:
+- toggle_label_email() fetches current categories, modifies the list, and patches the message.
+- Supports add and remove actions.
+- Normalizes label names and handles invalid actions gracefully.
+
+6. Drafting and Sending
+Gmail drafts are created with label:DRAFT. Outlook drafts are created via /me/messages with isDraft: true. To standardize:
+- Draft creation sets isDraft explicitly.
+- Sending a draft uses /me/messages/{id}/send.
+
+7. Deletion and Archiving
+Gmail uses TRASH and ARCHIVE labels. Outlook uses /DeletedItems and /Archive folders. To unify:
+- Deletion uses DELETE /me/messages/{id}
+- Archiving uses POST /me/messages/{id}/move with destinationId: Archive
+
+8. Replying
+Gmail replies are composed via thread ID. Outlook uses /me/messages/{id}/reply. To standardize:
+- reply_to_email() triggers the reply draft creation.
+- Future enhancement: inject metadata or categories during reply.
+
+9. Error Handling and Debugging
+All request methods include structured error handling. Failures return:
+- operation_status: failed
+- operation_message: error details
+Debugging hooks include:
+- Endpoint logging
+- Raw response inspection
+- Filter composition tracing
+
+10. Future Extensions
+Planned enhancements include:
+- A LabelPlanner to declaratively manage label-folder-category mappings
+- A MessageNormalizer to handle field extraction, flattening, and formatting
+- A $search fallback planner for inefficient filter combinations
+- Bulk operations for tagging, archiving, and deletion
+- Unified dashboard for cross-provider metadata inspection
+
+This plan ensures consistent behavior across Gmail and Outlook, enabling the assistant to reason about email metadata, search logic, and tagging semantics in a provider-agnostic way.

@@ -1,0 +1,30 @@
+1- ModuleNotFoundError:
+    * Caused:
+    - When running the MCP server (within a module), and it tries to access other files/imports from different modules
+    - Python couldn’t resolve sibling modules (api, email_client, etc.) when the working directory was misaligned.
+    - Claude’s config used --directory pointing to a subfolder (mcp_launcher), breaking import resolution.
+    * Solution:
+    - Add '__init__.py' to MailNet, api/, email_client/, mcp_launcher/ and other modules (if needed)
+    - This enabled us to resolve the imports when running the server by 'uv run -m path.to.server'
+    - Used claude config:
+        ```"email_mcp": {
+          "command": "uv",
+          "args": [
+            "--directory",
+            "path\\to\\project-MailNet",
+            "run",
+            "-m",
+            "mcp_launcher.server"
+          ]
+        }```
+      * Notes:
+      - '--directory' sets the working directory to the project root, so Python can resolve all sibling modules.
+      - '-m mcp_launcher.server' runs the server as a module, not a script, enabling proper import resolution. As ''-m' locates the mcp_server package inside the working directory, runs server.py inside the package, and sets imports correctly
+      - MCP tooling (uv run mcp dev ...) works best when the server is launched as a module from the root.
+      - Avoid 'uv run mcp dev path/to/server.py'  # breaks imports
+      - Use 'uv run -m path.to.server' without the .py extension to resolve imports correctly
+      - Claude config with "--directory": "path\\to\\project-MailNet\\mcp_launcher"  # breaks sibling imports
+
+
+
+
