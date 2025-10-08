@@ -21,7 +21,7 @@
       - '--directory' sets the working directory to the project root, so Python can resolve all sibling modules.
       - '-m mcp_launcher.server' runs the server as a module, not a script, enabling proper import resolution. As ''-m' locates the mcp_server package inside the working directory, runs server.py inside the package, and sets imports correctly
       - MCP tooling (uv run mcp dev ...) works best when the server is launched as a module from the root.
-      - Avoid 'uv run mcp dev path/to/server.py'  # breaks imports
+      - Avoid 'uv run mcp dev path/to/server.py' or `python path/to/server.py`  # breaks imports
       - Use 'uv run -m path.to.server' without the .py extension to resolve imports correctly
       - Claude config with "--directory": "path\\to\\project-MailNet\\mcp_launcher"  # breaks sibling imports
 
