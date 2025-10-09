@@ -1,6 +1,6 @@
 # 📬 MailNet MCP Server
 
-MailNet is a unified, agentic email orchestration server built for the [Model Context Protocol](https://github.com/modelcontextprotocol/servers). It supports Gmail and Outlook with standardized metadata, secure credential injection, and a rich toolset for assistant-driven workflows.
+MailNet Server is a unified, agentic email orchestration server built for the [Model Context Protocol](https://github.com/modelcontextprotocol/servers). It supports Gmail and Outlook with standardized metadata, secure credential injection, and a rich toolset for assistant-driven workflows. It is the MCP server that powers [MailNet](https://github.com/Astroa7m/MailNet) Mailing Agentic AI.
 
 ---
 
@@ -16,25 +16,29 @@ MailNet is a unified, agentic email orchestration server built for the [Model Co
 
 ## 🛠 Installation
 
-### Install requirements
-
-`pip install -r requirements.txt`
-
 ### 1. Manual Clone & Launch
 
 ```bash
 git clone https://github.com/Astroa7m/MailNet-MCP-Server.git
 cd MailNet-MCP-Server
-uv run -m mcp_launcher.server
 ```
+
+#### Install requirements
+
+`pip install -r requirements.txt`
+
+Note if you are going to use `uv` for launching you should first install it via:
+
+`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
+#### Launch
+Either with uv via:
+
+`uv run -m mcp_launcher.server`
+
 or
+
 `python -m mcp_launcher.server`
-
----
-
-### 💡 Install uv on Windows
-
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 ---
 
@@ -57,7 +61,7 @@ Check the [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Se
 
 ## 🖥 Claude Desktop Integration
 
-Add the following to your claude_desktop_config.json:
+Add the following to your `claude_desktop_config.json`:
 
 ```
 {
