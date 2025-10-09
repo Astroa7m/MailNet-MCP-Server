@@ -9,8 +9,8 @@ import aiohttp
 from dotenv import load_dotenv
 from msal import ConfidentialClientApplication
 
-from mcp_server.email_client.BaseEmailProvider import EmailClient
-from mcp_server.email_client.models import EmailingStatus
+from email_client.BaseEmailProvider import EmailClient
+from email_client.models import EmailingStatus
 from urllib.parse import quote
 from typing import Optional, Dict, Any
 

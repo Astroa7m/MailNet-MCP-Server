@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import Tuple, Dict, Union, List, Optional, Any
-from mcp_server.common import assign_doc
+from typing import Dict, List, Optional, Any
+
+from common import assign_doc
 
 
 class EmailClient(ABC):

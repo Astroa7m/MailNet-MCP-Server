@@ -1,4 +1,4 @@
-### Guide: How to Get Google Credentials for the MCP Application
+# Guide: How to Get Google Credentials for the MCP Application
 
 This guide will walk you through the necessary steps to authorize the MCP application to access your Gmail account. The process is in two parts:
 
@@ -163,4 +163,4 @@ Forward slashes (	/	) do not need to be escaped.
 You will not have to repeat the browser authorization step on subsequent runs, as the application will reuse the generated token.json.
 
 #### For more information, check [Gmail API Documentation](https://developers.google.com/workspace/gmail/api/guides)
-#### Check [Azure Authorization Guide](www.link.to.azure.auth.guide.com) if you haven't 
+#### Check [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/azure_auth_guide.md) if you haven't 

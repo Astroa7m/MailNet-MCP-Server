@@ -9,8 +9,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from mcp_server.email_client.BaseEmailProvider import EmailClient
-from mcp_server.email_client.models import EmailingStatus
+from email_client.BaseEmailProvider import EmailClient
+from email_client.models import EmailingStatus
 
 
 class GmailClient(EmailClient):

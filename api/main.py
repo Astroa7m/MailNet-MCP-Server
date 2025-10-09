@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
 from pydantic import ValidationError
 
-from mcp_server.common import assign_doc
-from mcp_server.common.models import EmailSettings, Provider
-from mcp_server.email_client import BaseEmailProvider
-from mcp_server.email_client.gmail_helpers import GmailClient
-from mcp_server.email_client.outlook_helpers import OutlookClient
+from common import assign_doc
+from common.models import EmailSettings, Provider
+from email_client import BaseEmailProvider
+from email_client.gmail_helpers import GmailClient
+from email_client.outlook_helpers import OutlookClient
 
 app = FastAPI(title="Email MCP Server")
 

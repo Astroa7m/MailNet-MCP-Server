@@ -1,4 +1,4 @@
-1- ModuleNotFoundError:
+1- ModuleNotFoundError (Only applicable if this module was used as a submodule within another root package):
     * Caused:
     - When running the MCP server (within a module), and it tries to access other files/imports from different modules
     - Python couldn’t resolve sibling modules (api, email_client, etc.) when the working directory was misaligned.
