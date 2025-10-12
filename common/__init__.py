@@ -6,7 +6,7 @@ DOCSTRINGS = {
 
         Args:
             to (str): Recipient email address.
-            subject (str): Subject line of the email.
+            subject (str): Subject line of the email. If not provided by the user generate it based on the context
             body (str): Content of the email body (plain text or HTML).
 
         Returns:
@@ -21,7 +21,7 @@ DOCSTRINGS = {
 
         Args:
             to (str): Intended recipient email address.
-            subject (str): Subject line of the draft.
+            subject (str): Subject line of the draft. If not provided by the user generate it based on the context
             body (str): Content of the draft message.
 
         Returns:
@@ -131,7 +131,7 @@ DOCSTRINGS = {
 def assign_doc(name=None):
     def decorator(func):
         key = name or func.__name__
-        func.__doc__ = DOCSTRINGS.get(key, "")
+        func.__doc__ = "Before executing this function, you must call load_email_settings tool, to understand how to use and generate correctly.\n" + DOCSTRINGS.get(key, "")
         return func
 
     return decorator

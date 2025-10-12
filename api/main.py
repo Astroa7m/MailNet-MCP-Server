@@ -19,14 +19,20 @@ path = Path(__file__).resolve().parents[1]
 
 SETTINGS_PATH = path / "email_settings.json"
 
+#todo: Make settings injection more neatly
+#todo: Settings should be retrieved again after manual refreshing or via update_email_settings func
 
-async def get_client(provider: Provider) -> BaseEmailProvider:
+async def get_client() -> BaseEmailProvider:
     # azure/outlook cred
     load_dotenv()
 
     azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
     azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
     azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
+
+    settings = await load_email_settings()
+
+    provider = settings.default_provider
 
     # google/gmail cred
     google_credentials = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
@@ -39,32 +45,32 @@ async def get_client(provider: Provider) -> BaseEmailProvider:
     return client
 
 
-@assign_doc()
 @app.post("/send_email")
+@assign_doc()
 async def send_email(to, subject, body, client=Depends(get_client)):
     return await client.send_email(to, subject, body)
 
 
-@assign_doc()
 @app.post("/draft_email")
+@assign_doc()
 async def draft_email(to: str, subject: str, body: str, client=Depends(get_client)):
     return await client.draft_email(to, subject, body)
 
 
-@assign_doc()
 @app.post("/send_draft")
+@assign_doc()
 async def send_draft(draft_id: str, client=Depends(get_client)):
     return await client.send_draft(draft_id)
 
 
-@assign_doc()
 @app.get("/read_emails")
+@assign_doc()
 async def read_emails(max_results: int = 5, days_back: int = 5, client=Depends(get_client)):
     return await client.read_emails(max_results=max_results, days_back=days_back)
 
 
-@assign_doc()
 @app.get("/search_emails")
+@assign_doc()
 async def search_emails(
         sender: Optional[str] = None,
         subject: Optional[str] = None,
@@ -82,34 +88,35 @@ async def search_emails(
     )
 
 
-@assign_doc()
 @app.post("/reply_to_email")
+@assign_doc()
 async def reply_to_email(msg_id: str, body: str, client=Depends(get_client)):
     return await client.reply_to_email(msg_id, body)
 
 
-@assign_doc()
 @app.delete("/delete_email/{msg_id}")
+@assign_doc()
 async def delete_email(msg_id: str, client=Depends(get_client)):
     return await client.delete_email(msg_id)
 
 
-@assign_doc()
 @app.post("/archive_email/{msg_id}")
+@assign_doc()
 async def archive_email(msg_id: str, client=Depends(get_client)):
     return await client.archive_email(msg_id)
 
 
-@assign_doc()
 @app.post("/toggle_label")
+@assign_doc()
 async def toggle_label(msg_id: str, label_name: str, action: str = "add", client=Depends(get_client)):
     return await client.toggle_label_email(msg_id, label_name, action)
 
 
-@app.get("/ load_email_settings")
+@app.get("/load_email_settings")
 async def load_email_settings() -> EmailSettings:
     """
-    Loads the current email generation settings
+    Loads the current email generation settings. These settings MUST be respected for the entire e-mailing generation.
+    The LLM MUST obey to all the rules within it when crafting emails.
 
     Returns:
         EmailSettings: A validated configuration object containing tone,
