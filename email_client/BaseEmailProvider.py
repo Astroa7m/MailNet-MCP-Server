@@ -38,6 +38,7 @@ class EmailClient(ABC):
     REPLY_TO_EMAIL_SUCCESS_MESSAGE = "Replied to email successfully"
     DELETE_EMAIL_SUCCESS_MESSAGE = "Email has been deleted successfully"
     ARCHIVE_EMAIL_SUCCESS_MESSAGE = "Emails have been archived successfully"
+    DOWNLOAD_ATTACHMENT_SUCCESS_MESSAGE = "Attachment has been downloaded successfully"
 
     @assign_doc()
     @abstractmethod
@@ -93,6 +94,25 @@ class EmailClient(ABC):
     @assign_doc()
     @abstractmethod
     async def toggle_label_email(self, msg_id: str, label_name: str, action: str = "add") -> Dict[str, Any]:
+        pass
+
+    @assign_doc()
+    @abstractmethod
+    async def download_attachment(self, msg_id: str, attachment_index: int = 0, save_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Downloads an attachment from a specific email message.
+
+        Args:
+            msg_id: The ID of the message containing the attachment.
+            attachment_index: The index of the attachment to download (0-based). Defaults to 0 (first attachment).
+            save_dir: Optional directory path to save the attachment. If None, returns base64 data.
+
+        Returns:
+            dict: A dict containing:
+                - operation_status: 'succeeded' or 'failed'.
+                - operation_message: Description of the download result.
+                - result: Dict containing filename, filepath (if saved), or base64 data.
+        """
         pass
 
     @staticmethod
