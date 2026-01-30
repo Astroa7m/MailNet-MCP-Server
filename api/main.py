@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -8,7 +9,7 @@ from fastapi import FastAPI, Depends
 from pydantic import ValidationError
 
 from common import assign_doc
-from common.models import EmailSettings, Provider
+from common.models import EmailSettings, Provider, EmailSettingsUpdate
 from email_client import BaseEmailProvider
 from email_client.gmail_helpers import GmailClient
 from email_client.outlook_helpers import OutlookClient
@@ -133,7 +134,7 @@ async def load_email_settings() -> EmailSettings:
 
 
 @app.post("/update_email_settings")
-async def update_email_settings(partial_settings: dict) -> EmailSettings | Tuple[str, str]:
+async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> EmailSettingsUpdate | Tuple[str, str]:
     """
     Updates the persisted email settings with partial overrides.
 
@@ -142,18 +143,20 @@ async def update_email_settings(partial_settings: dict) -> EmailSettings | Tuple
     Only provided fields are overridden; all others are preserved.
 
     Args:
-        partial_settings (dict): A dictionary of fields to override in the
+        partial_settings (EmailSettingsUpdate): A class of fields to override in the
                                  current email settings (e.g., tone, language).
 
     Returns:
         EmailSettings: The updated and validated configuration object. Or a Tuple dict
     """
     try:
+        # get settings
         current = await load_email_settings()
+        # convert pydantic to dict
         merged = current.model_dump()
-
-        for key, value in partial_settings.items():
-            if key in EmailSettings.model_fields:
+        new_partial_settings = new_partial_settings.model_dump(exclude_none=True)
+        for key, value in new_partial_settings.items():
+            if key in merged.keys():
                 merged[key] = value
             else:
                 raise ValueError(
