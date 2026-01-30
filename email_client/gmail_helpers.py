@@ -320,6 +320,103 @@ class GmailClient(EmailClient):
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
             return result
 
+    async def download_attachment(self, msg_id: str, attachment_index: int = 0, save_dir: str = None):
+        """
+        Downloads an attachment from a specific email message.
+
+        Args:
+            msg_id: The ID of the message containing the attachment.
+            attachment_index: The index of the attachment to download (0-based). Defaults to 0 (first attachment).
+            save_dir: Optional directory path to save the attachment. If None, returns base64 data.
+
+        Returns:
+            dict: A dict containing operation status, message, and result with attachment data.
+        """
+        try:
+            # Fetch the message
+            msg_data = await asyncio.to_thread(
+                self.service.users().messages().get(userId='me', id=msg_id, format='full').execute
+            )
+            payload = msg_data.get('payload', {})
+
+            # Find all attachments with their attachment IDs
+            attachments = []
+            if 'parts' in payload:
+                for part in payload['parts']:
+                    filename = part.get('filename')
+                    body = part.get('body', {})
+                    attachment_id = body.get('attachmentId')
+                    if filename and attachment_id:
+                        attachments.append({
+                            'filename': filename,
+                            'attachmentId': attachment_id,
+                            'mimeType': part.get('mimeType'),
+                            'size': body.get('size', 0)
+                        })
+
+            if not attachments:
+                result = {
+                    self.OP_RESULT: EmailingStatus.FAILED,
+                    self.OP_MESSAGE: f"No attachments found in message {msg_id}"
+                }
+                return result
+
+            if attachment_index >= len(attachments):
+                result = {
+                    self.OP_RESULT: EmailingStatus.FAILED,
+                    self.OP_MESSAGE: f"Attachment index {attachment_index} out of range. Message has {len(attachments)} attachment(s)."
+                }
+                return result
+
+            attachment_info = attachments[attachment_index]
+            attachment_id = attachment_info['attachmentId']
+            filename = attachment_info['filename']
+
+            # Fetch the actual attachment data
+            attachment_data = await asyncio.to_thread(
+                self.service.users().messages().attachments().get(
+                    userId='me',
+                    messageId=msg_id,
+                    id=attachment_id
+                ).execute
+            )
+
+            file_data_b64 = attachment_data.get('data', '')
+
+            result_data = {
+                'filename': filename,
+                'mimeType': attachment_info['mimeType'],
+                'size': attachment_info['size'],
+                'total_attachments': len(attachments)
+            }
+
+            if save_dir:
+                # Decode and save to file
+                os.makedirs(save_dir, exist_ok=True)
+                file_data = base64.urlsafe_b64decode(file_data_b64)
+                filepath = os.path.join(save_dir, filename)
+
+                with open(filepath, 'wb') as f:
+                    f.write(file_data)
+
+                result_data['filepath'] = filepath
+                result_data['saved'] = True
+            else:
+                # Return base64 data
+                result_data['data'] = file_data_b64
+                result_data['saved'] = False
+
+            result = {
+                self.OP_RESULT: EmailingStatus.SUCCEEDED,
+                self.OP_MESSAGE: self.DOWNLOAD_ATTACHMENT_SUCCESS_MESSAGE,
+                "result": result_data
+            }
+            return result
+
+        except Exception as e:
+            result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
+            return result
+
 
 async def test():
     credential_file = "../credentials.json"
