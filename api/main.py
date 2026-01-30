@@ -113,6 +113,31 @@ async def toggle_label(msg_id: str, label_name: str, action: str = "add", client
     return await client.toggle_label_email(msg_id, label_name, action)
 
 
+@app.get("/download_attachment")
+@assign_doc()
+async def download_attachment(
+        msg_id: str,
+        attachment_index: int = 0,
+        save_dir: Optional[str] = None,
+        client=Depends(get_client)
+):
+    """
+    Downloads an attachment from a specific email message.
+
+    Args:
+        msg_id: The ID of the message containing the attachment.
+        attachment_index: The index of the attachment to download (0-based). Defaults to 0 (first attachment).
+        save_dir: Optional directory path to save the attachment. If None, returns base64 data.
+
+    Returns:
+        dict: A dict containing:
+            - operation_status: 'succeeded' or 'failed'.
+            - operation_message: Description of the download result.
+            - result: Dict containing filename, filepath (if saved), mimeType, size, and optionally base64 data.
+    """
+    return await client.download_attachment(msg_id, attachment_index, save_dir)
+
+
 @app.get("/load_email_settings")
 async def load_email_settings() -> EmailSettings:
     """

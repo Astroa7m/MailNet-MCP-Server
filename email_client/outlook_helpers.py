@@ -399,6 +399,82 @@ class OutlookClient(EmailClient):
                 self.OP_MESSAGE: f"Failed to update label: {e}"
             }
 
+    async def download_attachment(self, msg_id: str, attachment_index: int = 0, save_dir: str = None) -> Dict[str, Any]:
+        """
+        Downloads an attachment from a specific email message using Microsoft Graph API.
+
+        Args:
+            msg_id: The ID of the message containing the attachment.
+            attachment_index: The index of the attachment to download (0-based). Defaults to 0 (first attachment).
+            save_dir: Optional directory path to save the attachment. If None, returns base64 data.
+
+        Returns:
+            dict: A dict containing operation status, message, and result with attachment data.
+        """
+        import base64
+
+        try:
+            # List all attachments
+            attachments_resp = await self._request("GET", f"/me/messages/{msg_id}/attachments")
+            attachments = attachments_resp.get("value", [])
+
+            if not attachments:
+                return {
+                    self.OP_RESULT: EmailingStatus.FAILED,
+                    self.OP_MESSAGE: f"No attachments found in message {msg_id}"
+                }
+
+            if attachment_index >= len(attachments):
+                return {
+                    self.OP_RESULT: EmailingStatus.FAILED,
+                    self.OP_MESSAGE: f"Attachment index {attachment_index} out of range. Message has {len(attachments)} attachment(s)."
+                }
+
+            attachment = attachments[attachment_index]
+            attachment_id = attachment.get("id")
+            filename = attachment.get("name", "attachment")
+            content_type = attachment.get("contentType", "application/octet-stream")
+            size = attachment.get("size", 0)
+
+            # Get the attachment content
+            attachment_data = await self._request("GET", f"/me/messages/{msg_id}/attachments/{attachment_id}")
+            content_bytes_b64 = attachment_data.get("contentBytes", "")
+
+            result_data = {
+                'filename': filename,
+                'mimeType': content_type,
+                'size': size,
+                'total_attachments': len(attachments)
+            }
+
+            if save_dir:
+                # Decode and save to file
+                os.makedirs(save_dir, exist_ok=True)
+                file_data = base64.b64decode(content_bytes_b64)
+                filepath = os.path.join(save_dir, filename)
+
+                with open(filepath, 'wb') as f:
+                    f.write(file_data)
+
+                result_data['filepath'] = filepath
+                result_data['saved'] = True
+            else:
+                # Return base64 data
+                result_data['data'] = content_bytes_b64
+                result_data['saved'] = False
+
+            return {
+                self.OP_RESULT: EmailingStatus.SUCCEEDED,
+                self.OP_MESSAGE: self.DOWNLOAD_ATTACHMENT_SUCCESS_MESSAGE,
+                "result": result_data
+            }
+
+        except Exception as e:
+            return {
+                self.OP_RESULT: EmailingStatus.FAILED,
+                self.OP_MESSAGE: str(e)
+            }
+
 
 async def test():
     load_dotenv()
