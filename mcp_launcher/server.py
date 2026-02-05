@@ -18,7 +18,7 @@ from email_client.outlook_helpers import OutlookClient
 
 path = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = path / "email_settings.json"
-mcp = FastMCP("email_mcp", debug=True)
+mcp = FastMCP("email_mcp")
 _email_client: Optional[EmailClient] = None
 _lock = asyncio.Lock()
 
@@ -50,12 +50,12 @@ async def ensure_email_client_instance() -> BaseEmailProvider:
     return _email_client
 
 
-@mcp.tool()
 @assign_doc()
 async def send_email(to, subject, body):
     await ensure_email_client_instance()
     return await _email_client.send_email(to, subject, body)
-
+# adding it this way to make it accessible via code for execution
+mcp.tool(send_email)
 
 @mcp.tool()
 @assign_doc()
