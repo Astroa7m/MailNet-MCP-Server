@@ -49,13 +49,11 @@ async def ensure_email_client_instance() -> BaseEmailProvider:
                                               token_file=azure_token_file_path)
     return _email_client
 
-
+@mcp.tool()
 @assign_doc()
 async def send_email(to, subject, body):
     await ensure_email_client_instance()
     return await _email_client.send_email(to, subject, body)
-# adding it this way to make it accessible via code for execution
-mcp.tool(send_email)
 
 @mcp.tool()
 @assign_doc()
@@ -230,4 +228,4 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="http", host="localhost", port=911)
