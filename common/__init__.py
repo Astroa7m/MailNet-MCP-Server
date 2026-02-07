@@ -1,3 +1,12 @@
+import json
+import os
+
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+
+load_dotenv()
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+
 DOCSTRINGS = {
     "send_email": """
         Sends an email to the specified recipient.
@@ -135,3 +144,14 @@ def assign_doc(name=None):
         return func
 
     return decorator
+
+
+def decrypt_payload(encrypted: str) -> dict:
+    """Decrypt encrypted credentials"""
+    try:
+        encrypted_bytes = encrypted.encode()
+        cipher = Fernet(ENCRYPTION_KEY.encode())
+        decrypted = cipher.decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode())
+    except Exception as e:
+        raise ValueError(f"Decryption failed: {e}")

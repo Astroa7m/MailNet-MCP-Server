@@ -228,4 +228,10 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
 
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="localhost", port=911)
+    # if is local field is not present in env vars (no matter the value)
+    # then it will launch https
+    is_local = os.getenv("is_local", "")
+    if is_local:
+        mcp.run(transport="stdio")
+    else:
+        mcp.run(transport="http", host="localhost", port=9111)
