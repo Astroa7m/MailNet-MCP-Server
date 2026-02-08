@@ -40,9 +40,48 @@ or
 
 `python -m mcp_launcher.server`
 
+#### Acquiring Azure Token (Personal local use)
+1. Go to `email_client/outlook_helpers.py`.
+2. run the file (by default runs `acquiring_azure_token_for_personal_use` function.
+To acquire `client_id` & `client_secret` Please check [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/azure_auth_guide.md)
+And make sure to add them to your env vars with the names shown below.
+```
+def acquiring_azure_token_for_personal_use():
+    load_dotenv()
+    client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
+    client_secret = os.getenv("AZURE_SECRET_VALUE")
+    OutlookClient(client_id=client_id, client_secret=client_secret,
+                                 redirect_uri="http://localhost:3000/callback")
+```
+It will do the following:
+- launch the browser and prompt you to sign in to your outlook account.
+- After successful login and approval of permissions, it will redirect you to `http://localhost:3000/callback` unless you specified different url in the constructor via `redirect_uri` param.
+- Copy the code after `code=` and before `&client_info` within the browser url and paste it in the terminal where you launched the file.
+- Done now you will have your azure token under `email_client` named `azure_token.json` by default (can be changed via `token_file_name` param in `OutlookClient` constructor).
+3. Provide that path to `AZURE_PREFERRED_TOKEN_FILE_PATH` env variable and you are good to go.
+---
+
+#### Acquiring Google Token (Personal local use)
+1. Go to `email_client/gmail_helpers.py`.
+2. run the file (by default runs `acquiring_google_token_for_personal_use` function.
+To acquire `google_credentials_file` Please check [Google Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/google_auth_guide.md) 
+And make sure to add the path to it in your env vars with the name shown below.
+```
+def acquiring_google_token_for_personal_use():
+    load_dotenv()
+    google_credentials_file = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
+    GmailClient(credential_file=google_credentials_file)
+```
+It will do the following:
+- launch the browser and prompt you to sign in to your gmail account.
+- After successful login and approval of permissions, it will redirect you to a window with a message `The authentication flow has completed. You may close this window.` that means you are done here.
+- Done now you will have your google token under `email_client` named `google_token.json` by default (can be changed via `token_file_name` param in `GmailClient` constructor).
+3. Provide that path to `GOOGLE_CREDENTIALS_FILE_PATH` env variable and you are good to go.
 ---
 
 ## 🔒 Environment Variables
+
+Check the [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/azure_auth_guide.md) and [Google Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/google_auth_guide.md) to learn how to set up both accounts and get your credentials ready.
 
 Set your environment variables for provider credentials:
 
@@ -55,7 +94,11 @@ Set your environment variables for provider credentials:
 **AZURE_CLIENT_SECRET_VALUE**=your-secret  
 **AZURE_PREFERRED_TOKEN_FILE_PATH**=path/to/azure_token.json  
 
-Check the [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/azure_auth_guide.md) and [Google Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/google_auth_guide.md) to learn how to set up both accounts and get your tokens/credentials ready.
+#### Other (Important for local use)
+The following env variable is important to be set when running it locally or for Claude Desktop. The value deosn't matter but as long as the field is there you will be able to run it locally.
+It was introduced to make the server flexible to be run over http/s or stdio and to route the server to either look for credentials in local files or expect it from the client via http/s headers.
+
+**is_local**="true"
 
 ---
 
@@ -80,7 +123,8 @@ Add the following to your `claude_desktop_config.json`:
         "AZURE_CLIENT_SECRET_VALUE": "<AZURE_CLIENT_SECRET_VALUE>",
         "AZURE_PREFERRED_TOKEN_FILE_PATH": "C:\\Path\\To\\azure_token.json",
         "GOOGLE_CREDENTIALS_FILE_PATH": "C:\\Path\\To\\google_credentials.json",
-        "GOOGLE_PREFERRED_TOKEN_FILE_PATH": "C:\\Path\\To\\google_token.json"
+        "GOOGLE_PREFERRED_TOKEN_FILE_PATH": "C:\\Path\\To\\google_token.json",
+        "is_local": "true"
       }
     }
   }
