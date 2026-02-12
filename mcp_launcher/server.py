@@ -7,9 +7,10 @@ from typing import Optional
 import aiofiles
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 from pydantic import ValidationError
 
-from common import assign_doc
+from common import assign_doc, decrypt_payload
 from common.models import Provider, EmailSettingsUpdate, EmailSettings
 from email_client import BaseEmailProvider
 from email_client.BaseEmailProvider import EmailClient
@@ -18,59 +19,99 @@ from email_client.outlook_helpers import OutlookClient
 
 path = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = path / "email_settings.json"
-mcp = FastMCP("email_mcp")
 _email_client: Optional[EmailClient] = None
 _lock = asyncio.Lock()
+load_dotenv()
+
+# if is local field is not present in env vars (no matter the value)
+# then it will launch https
+is_local = os.getenv("is_local", "")
 
 
-async def ensure_email_client_instance() -> BaseEmailProvider:
+async def ensure_email_client_instance(azure_token=None, google_token=None, redirect_uri=None) -> BaseEmailProvider:
+    settings = await load_email_settings()
+    provider = settings.default_provider
+
+    # google/gmail cred
+    google_credentials = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
+    azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
+    azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
+
     global _email_client
     if _email_client is None:
         async with _lock:
-            # azure/outlook cred
-            load_dotenv()
+            if azure_token is None or google_token is None:  # then we are running it locally
+                # azure/outlook cred
 
-            azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
-            azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
-            azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
+                azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
 
-            settings = await _load_email_settings()
-
-            provider = settings.default_provider
-
-            # google/gmail cred
-            google_credentials = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
-            google_token_file_path = os.getenv("GOOGLE_PREFERRED_TOKEN_FILE_PATH")
-            if provider == Provider.GOOGLE:
-                _email_client = GmailClient(google_credentials, google_token_file_path)
+                google_token_file_path = os.getenv("GOOGLE_PREFERRED_TOKEN_FILE_PATH")
+                if provider == Provider.GOOGLE:
+                    _email_client = GmailClient(credential_file_path=google_credentials,
+                                                token_file_path=google_token_file_path)
+                else:
+                    _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
+                                                  redirect_uri="http://localhost:3000/callback",
+                                                  token_file_path=azure_token_file_path)
+            # remotely
             else:
-                _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
-                                              redirect_uri="http://localhost:3000/callback",
-                                              token_file=azure_token_file_path)
+                if provider == Provider.GOOGLE:
+                    _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
+                else:
+                    _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
+                                                  redirect_uri=redirect_uri,
+                                                  token_info=azure_token)
+
     return _email_client
+
+
+def _extract_headers_if_found():
+    azure_token, google_token, redirect_uri = None, None, None
+    headers = get_http_headers()
+    target_headers = ['azure_token', 'google_token', 'redirect_uri']
+    if all(key in headers for key in target_headers):
+        azure_token = decrypt_payload(headers[target_headers[0]])
+        google_token = decrypt_payload(headers[target_headers[1]])
+        redirect_uri = headers[target_headers[2]]
+    return azure_token, google_token, redirect_uri
+
+
+mcp = FastMCP("email_mcp")
+
 
 @mcp.tool()
 @assign_doc()
 async def send_email(to, subject, body):
-    await ensure_email_client_instance()
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.send_email(to, subject, body)
+
 
 @mcp.tool()
 @assign_doc()
 async def draft_email(to: str, subject: str, body: str):
-    await ensure_email_client_instance()
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.draft_email(to, subject, body)
 
 
 @mcp.tool()
 @assign_doc()
 async def send_draft(draft_id: str):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.send_draft(draft_id)
 
 
 @mcp.tool()
 @assign_doc()
 async def read_emails(max_results: int = 5, days_back: int = 5):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.read_emails(max_results=max_results, days_back=days_back)
 
 
@@ -87,7 +128,9 @@ async def search_emails(
         msg_id: Optional[str] = None,
         max_results: int = 10,
 ):
-    await ensure_email_client_instance()
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.search_emails(
         sender, subject, has_attachment, after, before, unread, label, msg_id, max_results
     )
@@ -96,24 +139,36 @@ async def search_emails(
 @mcp.tool()
 @assign_doc()
 async def reply_to_email(msg_id: str, body: str):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.reply_to_email(msg_id, body)
 
 
 @mcp.tool()
 @assign_doc()
 async def delete_email(msg_id: str):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.delete_email(msg_id)
 
 
 @mcp.tool()
 @assign_doc()
 async def archive_email(msg_id: str):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.archive_email(msg_id)
 
 
 @mcp.tool()
 @assign_doc()
 async def toggle_label(msg_id: str, label_name: str, action: str = "add"):
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.toggle_label_email(msg_id, label_name, action)
 
 
@@ -138,11 +193,12 @@ async def download_attachment(
             - operation_message: Description of the download result.
             - result: Dict containing filename, filepath (if saved), mimeType, size, and optionally base64 data.
     """
-    await ensure_email_client_instance()
+    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+
+    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
     return await _email_client.download_attachment(msg_id, attachment_index, save_dir)
 
 
-@mcp.tool()
 async def load_email_settings() -> EmailSettings:
     """
     Loads the current email generation settings. These settings MUST be respected for the entire e-mailing generation.
@@ -162,23 +218,7 @@ async def load_email_settings() -> EmailSettings:
         return EmailSettings()
 
 
-async def _load_email_settings() -> EmailSettings:
-    """
-    Loads the current email generation settings. These settings MUST be respected for the entire e-mailing generation.
-    The LLM MUST obey to all the rules within it when crafting emails.
-
-    Returns:
-        EmailSettings: A validated configuration object containing tone,
-                       style, personalization, and behavioral flags.
-    """
-
-    try:
-        async with aiofiles.open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            content = await f.read()
-            data = json.loads(content)
-            return EmailSettings(**data)
-    except (FileNotFoundError, json.JSONDecodeError, ValidationError):
-        return EmailSettings()
+mcp.tool(load_email_settings)
 
 
 @mcp.tool()
@@ -200,7 +240,7 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
     """
     try:
         # get settings
-        current = await _load_email_settings()
+        current = await load_email_settings()
         # convert pydantic to dict
         merged = current.model_dump()
         new_partial_settings = new_partial_settings.model_dump(exclude_none=True)
@@ -228,9 +268,6 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
 
 
 if __name__ == "__main__":
-    # if is local field is not present in env vars (no matter the value)
-    # then it will launch https
-    is_local = os.getenv("is_local", "")
     if is_local:
         mcp.run(transport="stdio")
     else:

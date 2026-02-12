@@ -1,9 +1,10 @@
-import asyncio
 import json
 import os
 import time
 import webbrowser
 from datetime import datetime
+from typing import Optional, Dict, Any
+from urllib.parse import quote
 
 import aiohttp
 from dotenv import load_dotenv
@@ -11,8 +12,6 @@ from msal import ConfidentialClientApplication
 
 from email_client.BaseEmailProvider import EmailClient
 from email_client.models import EmailingStatus
-from urllib.parse import quote
-from typing import Optional, Dict, Any
 
 GRAPH_API = "https://graph.microsoft.com/v1.0"
 
@@ -112,11 +111,24 @@ class OutlookClient(EmailClient):
         "https://graph.microsoft.com/User.Read"
     ]
 
-    def __init__(self, client_id: str, client_secret: str, redirect_uri: str, token_file: str):
+    def __init__(self, client_id: str, client_secret: str, redirect_uri: str, token_file_path: str | None = None,
+                 token_info: dict | None = None):
+        """
+            Initialize OutlookClient with flexible token handling.
+            Args:
+                client_id: Azure application client ID
+                client_secret: Azure application client secret
+                redirect_uri: OAuth redirect URI
+                token_file_path: Path to token file (for local/file-based auth)
+                token_info: Token info as dict (for server-based auth where tokens are passed directly)
+            Note: Provide either token_file_name OR token_info, not both.
+                  If both are provided, token_info takes precedence.
+        """
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-        self.token_file = token_file
+        self.token_file_name = token_file_path
+        self.token_info = token_info
         self.authority = "https://login.microsoftonline.com/consumers"
         self.app = ConfidentialClientApplication(
             client_id=self.client_id,
@@ -130,13 +142,26 @@ class OutlookClient(EmailClient):
         }
 
     def _load_or_authenticate(self) -> str:
-        if os.path.exists(self.token_file):
-            with open(self.token_file, "r") as f:
+        # priority 1, use token_info directly
+        if self.token_info:
+            # no refreshing connected clients handle this if remote
+            return self.token_info["refresh_token"]
+
+        # priority 2, use token_file if it exists (for local/desktop mode)
+        elif self.token_file_name and os.path.exists(self.token_file_name):
+            with open(self.token_file_name, "r") as f:
                 token_data = json.load(f)
                 if token_data.get("expires_at", 0) > time.time():
                     return token_data["access_token"]
                 if "refresh_token" in token_data:
                     return self._refresh_token(token_data["refresh_token"])
+
+        if not self.token_info:
+            # then we are using it locally and have no token yet
+            if not self.token_file_name:
+                # if token file is not provided, meaning new cred registration
+                # then give it a name
+                self.token_file_name = "azure_token.json"
 
         # launch browser for user consent
         auth_flow = self.app.initiate_auth_code_flow(
@@ -160,7 +185,7 @@ class OutlookClient(EmailClient):
     def _store_token(self, result: dict) -> str:
         if "access_token" in result:
             result["expires_at"] = time.time() + result.get("expires_in", 3600)
-            with open(self.token_file, "w") as f:
+            with open(self.token_file_name, "w") as f:
                 json.dump(result, f)
             return result["access_token"]
         raise Exception(f"Token acquisition failed: {result.get('error_description')}")
@@ -476,12 +501,20 @@ class OutlookClient(EmailClient):
             }
 
 
+def acquiring_azure_token_for_personal_use():
+    load_dotenv()
+    client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
+    client_secret = os.getenv("AZURE_SECRET_VALUE")
+    OutlookClient(client_id=client_id, client_secret=client_secret,
+                  redirect_uri="http://localhost:3000/callback")
+
+
 async def test():
     load_dotenv()
     client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
     client_secret = os.getenv("AZURE_SECRET_VALUE")
     graph_client = OutlookClient(client_id=client_id, client_secret=client_secret,
-                                 redirect_uri="http://localhost:3000/callback", token_file="graph_token.json")
+                                 redirect_uri="http://localhost:3000/callback", token_file_path="graph_token.json")
 
     print("Starting tests")
 
@@ -554,4 +587,4 @@ async def test():
 
 
 if __name__ == "__main__":
-    asyncio.run(test())
+    acquiring_azure_token_for_personal_use()

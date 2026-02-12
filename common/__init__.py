@@ -140,7 +140,8 @@ DOCSTRINGS = {
 def assign_doc(name=None):
     def decorator(func):
         key = name or func.__name__
-        func.__doc__ = "Before executing this function, you must call load_email_settings tool, to understand how to use and generate correctly.\n" + DOCSTRINGS.get(key, "")
+        func.__doc__ = "Before executing this function, you must call load_email_settings tool, to understand how to use and generate correctly.\n" + DOCSTRINGS.get(
+            key, "")
         return func
 
     return decorator

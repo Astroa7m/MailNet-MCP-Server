@@ -4,6 +4,7 @@ import os.path
 from datetime import datetime
 from email.mime.text import MIMEText
 
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -21,29 +22,60 @@ class GmailClient(EmailClient):
         'https://www.googleapis.com/auth/gmail.modify',
     ]
 
-    def __init__(self, credential_file, token_file):
+    def __init__(self, credential_file_path, token_file_path: str | None = None, token_info: dict | None = None):
+        """
+           Initialize GmailClient with flexible token handling.
+
+           Args:
+               credential_file_path: Path to Google OAuth2 credentials file
+               token_file_path: Path to token file (for local/file-based auth)
+               token_info: Token info as dict (for server-based auth where tokens are passed directly)
+
+           Note: Provide either token_file_name OR token_info, not both.
+                 If both are provided, token_info takes precedence.
+           """
         super().__init__()
-        self.CREDENTIAL_FILE = credential_file
-        self.TOKEN_FILE = token_file
+        self.CREDENTIAL_FILE = credential_file_path
+        self.TOKEN_FILE = token_file_path
+        self.token_info = token_info
         self.service = self._get_gmail_service_sync()
 
     def _get_gmail_service_sync(self):
         creds = None
 
-        if os.path.exists(self.TOKEN_FILE):
+        # priority 1, use token_info directly
+        if self.token_info:
+            creds = Credentials.from_authorized_user_info(self.token_info, self.SCOPES)
+        # priority 2, use token_file if it exists (for local/desktop mode)
+        elif self.TOKEN_FILE and os.path.exists(self.TOKEN_FILE):
             creds = Credentials.from_authorized_user_file(self.TOKEN_FILE, self.SCOPES)
 
+        # refresh or create new credentials if needed
+        # this will never be triggerd for remote use since invalidity will be handled by remote client
+        # so without a check we are going to leave it as is
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
+
+                # # Update token_info if it was provided originally for remote use
+                # # will delete later as we don't give it back to the client
+                # if self.token_info:
+                #     self.token_info = json.loads(creds.to_json())
+
             else:
+                # first time, then get new ones
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.CREDENTIAL_FILE, self.SCOPES
                 )
                 creds = flow.run_local_server(port=0, include_granted_scopes='true')
 
-            with open(self.TOKEN_FILE, 'w') as token:
-                token.write(creds.to_json())
+            if not self.token_info:  # save to file only if using file-based auth
+                if not self.TOKEN_FILE:
+                    # if token file is not provided, meaning we got new cred registration
+                    # then give it a name
+                    self.TOKEN_FILE = "google_token.json"
+                with open(self.TOKEN_FILE, 'w') as token:
+                    token.write(creds.to_json())
 
         return build('gmail', 'v1', credentials=creds)
 
@@ -418,10 +450,16 @@ class GmailClient(EmailClient):
             return result
 
 
+def acquiring_google_token_for_personal_use():
+    load_dotenv()
+    google_credentials_file = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
+    GmailClient(credential_file_path=google_credentials_file)
+
+
 async def test():
-    credential_file = "../credentials.json"
-    token_file = "../token.json"
-    gmail_client = GmailClient(credential_file, token_file)
+    load_dotenv()
+    google_credentials_file = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
+    gmail_client = GmailClient(google_credentials_file)
 
     print("Starting tests")
     """SENDING EMAIL"""
@@ -479,4 +517,4 @@ async def test():
 
 
 if __name__ == "__main__":
-    asyncio.run(test())
+    acquiring_google_token_for_personal_use()
