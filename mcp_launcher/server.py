@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 from pathlib import Path
@@ -10,17 +9,14 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 from pydantic import ValidationError
 
-from common import assign_doc, decrypt_payload
-from common.models import Provider, EmailSettingsUpdate, EmailSettings
+from common import decrypt_payload, assign_doc
+from common.models import Provider, EmailSettings, EmailSettingsUpdate
 from email_client import BaseEmailProvider
-from email_client.BaseEmailProvider import EmailClient
 from email_client.gmail_helpers import GmailClient
 from email_client.outlook_helpers import OutlookClient
 
 path = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = path / "email_settings.json"
-_email_client: Optional[EmailClient] = None
-_lock = asyncio.Lock()
 load_dotenv()
 
 # if is local field is not present in env vars (no matter the value)
@@ -28,39 +24,35 @@ load_dotenv()
 is_local = os.getenv("is_local", "")
 
 
-async def ensure_email_client_instance(azure_token=None, google_token=None, redirect_uri=None) -> BaseEmailProvider:
+async def create_email_client_instance(azure_token=None, google_token=None, redirect_uri=None) -> BaseEmailProvider:
     settings = await load_email_settings()
     provider = settings.default_provider
-
     # google/gmail cred
     google_credentials = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
     azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
     azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
 
-    global _email_client
-    if _email_client is None:
-        async with _lock:
-            if azure_token is None or google_token is None:  # then we are running it locally
-                # azure/outlook cred
+    if azure_token is None or google_token is None:  # then we are running it locally
+        # azure/outlook cred
 
-                azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
+        azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
 
-                google_token_file_path = os.getenv("GOOGLE_PREFERRED_TOKEN_FILE_PATH")
-                if provider == Provider.GOOGLE:
-                    _email_client = GmailClient(credential_file_path=google_credentials,
-                                                token_file_path=google_token_file_path)
-                else:
-                    _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
-                                                  redirect_uri="http://localhost:3000/callback",
-                                                  token_file_path=azure_token_file_path)
-            # remotely
-            else:
-                if provider == Provider.GOOGLE:
-                    _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
-                else:
-                    _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
-                                                  redirect_uri=redirect_uri,
-                                                  token_info=azure_token)
+        google_token_file_path = os.getenv("GOOGLE_PREFERRED_TOKEN_FILE_PATH")
+        if provider == Provider.GOOGLE:
+            _email_client = GmailClient(credential_file_path=google_credentials,
+                                        token_file_path=google_token_file_path)
+        else:
+            _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
+                                          redirect_uri="http://localhost:3000/callback",
+                                          token_file_path=azure_token_file_path)
+    # remotely
+    else:
+        if provider == Provider.GOOGLE:
+            _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
+        else:
+            _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
+                                          redirect_uri=redirect_uri,
+                                          token_info=azure_token)
 
     return _email_client
 
@@ -84,8 +76,8 @@ mcp = FastMCP("email_mcp")
 async def send_email(to, subject, body):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.send_email(to, subject, body)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.send_email(to, subject, body)
 
 
 @mcp.tool()
@@ -93,8 +85,8 @@ async def send_email(to, subject, body):
 async def draft_email(to: str, subject: str, body: str):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.draft_email(to, subject, body)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.draft_email(to, subject, body)
 
 
 @mcp.tool()
@@ -102,8 +94,8 @@ async def draft_email(to: str, subject: str, body: str):
 async def send_draft(draft_id: str):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.send_draft(draft_id)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.send_draft(draft_id)
 
 
 @mcp.tool()
@@ -111,8 +103,8 @@ async def send_draft(draft_id: str):
 async def read_emails(max_results: int = 5, days_back: int = 5):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.read_emails(max_results=max_results, days_back=days_back)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.read_emails(max_results=max_results, days_back=days_back)
 
 
 @mcp.tool()
@@ -130,8 +122,8 @@ async def search_emails(
 ):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.search_emails(
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.search_emails(
         sender, subject, has_attachment, after, before, unread, label, msg_id, max_results
     )
 
@@ -141,8 +133,8 @@ async def search_emails(
 async def reply_to_email(msg_id: str, body: str):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.reply_to_email(msg_id, body)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.reply_to_email(msg_id, body)
 
 
 @mcp.tool()
@@ -150,8 +142,8 @@ async def reply_to_email(msg_id: str, body: str):
 async def delete_email(msg_id: str):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.delete_email(msg_id)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.delete_email(msg_id)
 
 
 @mcp.tool()
@@ -159,8 +151,8 @@ async def delete_email(msg_id: str):
 async def archive_email(msg_id: str):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.archive_email(msg_id)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.archive_email(msg_id)
 
 
 @mcp.tool()
@@ -168,8 +160,8 @@ async def archive_email(msg_id: str):
 async def toggle_label(msg_id: str, label_name: str, action: str = "add"):
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.toggle_label_email(msg_id, label_name, action)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.toggle_label_email(msg_id, label_name, action)
 
 
 @mcp.tool()
@@ -195,8 +187,8 @@ async def download_attachment(
     """
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
-    await ensure_email_client_instance(azure_token, google_token, redirect_uri)
-    return await _email_client.download_attachment(msg_id, attachment_index, save_dir)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    return await email_client.download_attachment(msg_id, attachment_index, save_dir)
 
 
 async def load_email_settings() -> EmailSettings:
@@ -223,7 +215,6 @@ mcp.tool(load_email_settings)
 
 @mcp.tool()
 async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> EmailSettings | tuple[str, str]:
-    global _email_client
     """
     Updates the persisted email settings with partial overrides.
 
@@ -232,7 +223,7 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
     Only provided fields are overridden; all others are preserved.
 
     Args:
-        partial_settings (EmailSettingsUpdate): A class of fields to override in the
+        new_partial_settings (EmailSettingsUpdate): A class of fields to override in the
                                  current email settings (e.g., tone, language).
 
     Returns:
@@ -257,9 +248,9 @@ async def update_email_settings(new_partial_settings: EmailSettingsUpdate) -> Em
         async with aiofiles.open(SETTINGS_PATH, "w", encoding="utf-8") as f:
             await f.write(json.dumps(updated.model_dump(), indent=2, ensure_ascii=False))
 
-        # to enforce client reinit with new provider we are going to set it to none if changed
-        if current.default_provider != updated.default_provider:
-            _email_client = None
+        # # to enforce client reinit with new provider we are going to set it to none if changed
+        # if current.default_provider != updated.default_provider:
+        #     _email_client = None
 
         return updated
 
