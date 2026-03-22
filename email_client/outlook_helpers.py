@@ -144,8 +144,17 @@ class OutlookClient(EmailClient):
     def _load_or_authenticate(self) -> str:
         # priority 1, use token_info directly
         if self.token_info:
-            # no refreshing connected clients handle this if remote
-            return self.token_info["refresh_token"]
+            # checking if access token is still valid
+            expires_at = self.token_info.get("expires_at", 0)
+            if expires_at and time.time() < expires_at - 60:
+                return self.token_info["access_token"]  # use access token
+
+            # token expired, refresh it
+            if self.token_info.get("refresh_token"):
+                return self._refresh_token(self.token_info["refresh_token"])
+
+            # falling back to access token even if possibly expired
+            return self.token_info["access_token"]
 
         # priority 2, use token_file if it exists (for local/desktop mode)
         elif self.token_file_name and os.path.exists(self.token_file_name):
@@ -185,8 +194,10 @@ class OutlookClient(EmailClient):
     def _store_token(self, result: dict) -> str:
         if "access_token" in result:
             result["expires_at"] = time.time() + result.get("expires_in", 3600)
-            with open(self.token_file_name, "w") as f:
-                json.dump(result, f)
+            # only write to file in local mode
+            if self.token_file_name:
+                with open(self.token_file_name, "w") as f:
+                    json.dump(result, f)
             return result["access_token"]
         raise Exception(f"Token acquisition failed: {result.get('error_description')}")
 

@@ -32,39 +32,48 @@ async def create_email_client_instance(azure_token=None, google_token=None, redi
     azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
     azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
 
-    if azure_token is None or google_token is None:  # then we are running it locally
+    if azure_token is None and google_token is None:  # then we are running it locally
         # azure/outlook cred
 
         azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
 
         google_token_file_path = os.getenv("GOOGLE_PREFERRED_TOKEN_FILE_PATH")
-        if provider == Provider.GOOGLE:
+        if provider == Provider.GOOGLE and google_token_file_path:
             _email_client = GmailClient(credential_file_path=google_credentials,
                                         token_file_path=google_token_file_path)
-        else:
+        elif provider == Provider.OUTLOOK and azure_token_file_path:
             _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
                                           redirect_uri="http://localhost:3000/callback",
                                           token_file_path=azure_token_file_path)
+        else:
+            raise RuntimeError("Neither Google token file path nor Microsoft token file path is provided")
     # remotely
     else:
-        if provider == Provider.GOOGLE:
+        if google_token:
             _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
-        else:
+        elif azure_token:
+            print("Azure token from server\n", azure_token)
             _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
                                           redirect_uri=redirect_uri,
                                           token_info=azure_token)
+        else:
+            raise RuntimeError("Neither Google token nor Microsoft token is provided")
 
     return _email_client
 
 
 def _extract_headers_if_found():
-    azure_token, google_token, redirect_uri = None, None, None
+    if is_local:
+        return None, None, None
+
     headers = get_http_headers()
-    target_headers = ['azure_token', 'google_token', 'redirect_uri']
-    if all(key in headers for key in target_headers):
-        azure_token = decrypt_payload(headers[target_headers[0]])
-        google_token = decrypt_payload(headers[target_headers[1]])
-        redirect_uri = headers[target_headers[2]]
+    azure_token = decrypt_payload(headers['azure_token']) if 'azure_token' in headers else None
+    google_token = decrypt_payload(headers['google_token']) if 'google_token' in headers else None
+    redirect_uri = headers.get('redirect_uri')
+
+    if azure_token is None and google_token is None:
+        raise ValueError("No auth token provided in request headers")
+
     return azure_token, google_token, redirect_uri
 
 
