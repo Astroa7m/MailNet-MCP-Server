@@ -24,6 +24,30 @@ load_dotenv()
 is_local = os.getenv("is_local", "")
 
 
+# Validation constants
+MAX_EMAIL_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_SUBJECT_LENGTH = 998  # RFC 2822 limit
+MAX_RESULTS_LIMIT = 100
+MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25 MB (Gmail/Outlook limit)
+
+
+def _validate_email_input(to: str, subject: str, body: str):
+    """Validate email input parameters."""
+    if len(body) > MAX_EMAIL_BODY_SIZE:
+        raise ValueError(f"Email body exceeds maximum size of {MAX_EMAIL_BODY_SIZE} bytes")
+    if len(subject) > MAX_SUBJECT_LENGTH:
+        raise ValueError(f"Subject exceeds maximum length of {MAX_SUBJECT_LENGTH} characters")
+    if not to or not isinstance(to, str):
+        raise ValueError("Recipient (to) is required and must be a string")
+
+
+def _validate_max_results(max_results: int) -> int:
+    """Cap max_results to prevent abuse."""
+    if max_results > MAX_RESULTS_LIMIT:
+        return MAX_RESULTS_LIMIT
+    return max_results
+
+
 async def create_email_client_instance(azure_token=None, google_token=None, redirect_uri=None) -> BaseEmailProvider:
     settings = await load_email_settings()
     provider = settings.default_provider
@@ -83,6 +107,7 @@ mcp = FastMCP("email_mcp")
 @mcp.tool()
 @assign_doc()
 async def send_email(to, subject, body):
+    _validate_email_input(to, subject, body)
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
@@ -92,6 +117,7 @@ async def send_email(to, subject, body):
 @mcp.tool()
 @assign_doc()
 async def draft_email(to: str, subject: str, body: str):
+    _validate_email_input(to, subject, body)
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
@@ -110,6 +136,7 @@ async def send_draft(draft_id: str):
 @mcp.tool()
 @assign_doc()
 async def read_emails(max_results: int = 5, days_back: int = 5):
+    max_results = _validate_max_results(max_results)
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
@@ -129,6 +156,7 @@ async def search_emails(
         msg_id: Optional[str] = None,
         max_results: int = 10,
 ):
+    max_results = _validate_max_results(max_results)
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
@@ -140,6 +168,8 @@ async def search_emails(
 @mcp.tool()
 @assign_doc()
 async def reply_to_email(msg_id: str, body: str):
+    if len(body) > MAX_EMAIL_BODY_SIZE:
+        raise ValueError(f"Reply body exceeds maximum size of {MAX_EMAIL_BODY_SIZE} bytes")
     azure_token, google_token, redirect_uri = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)

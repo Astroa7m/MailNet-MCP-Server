@@ -204,6 +204,14 @@ class OutlookClient(EmailClient):
     async def _request(self, method: str, endpoint: str, **kwargs) -> dict[str, Any]:
         url = f"{GRAPH_API}{endpoint}"
 
+        # refresh token if expired (for local mode sessions)
+        if self.token_info and time.time() > self.token_info.get("expires_at", 0) - 60:
+            if self.token_info.get("refresh_token"):
+                self.token = self._refresh_token(self.token_info["refresh_token"])
+                self.headers["Authorization"] = f"Bearer {self.token}"
+                self.token_info["expires_at"] = time.time() + 3600
+                self.token_info["access_token"] = self.token
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.request(method, url, headers=self.headers, **kwargs) as resp:
@@ -224,7 +232,7 @@ class OutlookClient(EmailClient):
                     raise Exception(resp.reason, error_data.get("error"))
 
         except Exception as e:
-            raise RuntimeError(f"Request to {url} failed: {e}") from e
+            raise RuntimeError(f"Request to {endpoint} failed: {e}") from e
 
     async def send_email(self, to: str, subject: str, body: str) -> Dict[str, Any]:
         try:
