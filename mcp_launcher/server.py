@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -9,11 +10,19 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 from pydantic import ValidationError
 
+# adding project root to path
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+
 from common import decrypt_payload, assign_doc
 from common.models import Provider, EmailSettings, EmailSettingsUpdate
 from email_client import BaseEmailProvider
 from email_client.gmail_helpers import GmailClient
 from email_client.outlook_helpers import OutlookClient
+
+
 
 path = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = path / "email_settings.json"
