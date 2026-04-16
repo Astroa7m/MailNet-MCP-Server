@@ -57,15 +57,18 @@ def _validate_max_results(max_results: int) -> int:
     return max_results
 
 
-async def create_email_client_instance(azure_token=None, google_token=None, redirect_uri=None) -> BaseEmailProvider:
-    settings = await load_email_settings()
-    provider = settings.default_provider
+async def create_email_client_instance(azure_token=None, google_token=None, redirect_uri=None, default_provider="google") -> BaseEmailProvider:
     # google/gmail cred
     google_credentials = os.getenv("GOOGLE_CREDENTIALS_FILE_PATH")
     azure_client_id = os.getenv("AZURE_APPLICATION_CLIENT_ID")
     azure_client_secret = os.getenv("AZURE_SECRET_VALUE")
 
     if azure_token is None and google_token is None:  # then we are running it locally
+
+        # get local settings
+        settings = await load_email_settings()
+        provider = settings.default_provider
+
         # azure/outlook cred
 
         azure_token_file_path = os.getenv("AZURE_PREFERRED_TOKEN_FILE_PATH")
@@ -82,7 +85,11 @@ async def create_email_client_instance(azure_token=None, google_token=None, redi
             raise RuntimeError("Neither Google token file path nor Microsoft token file path is provided")
     # remotely
     else:
-        if google_token:
+
+        # email settings are at client/llm side
+        # we only need default provider
+
+        if google_token and default_provider == "google":
             _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
         elif azure_token:
             print("Azure token from server\n", azure_token)
@@ -103,11 +110,11 @@ def _extract_headers_if_found():
     azure_token = decrypt_payload(headers['azure_token']) if 'azure_token' in headers else None
     google_token = decrypt_payload(headers['google_token']) if 'google_token' in headers else None
     redirect_uri = headers.get('redirect_uri')
-
+    default_provider = headers.get("default_provider", "google")
     if azure_token is None and google_token is None:
         raise ValueError("No auth token provided in request headers")
 
-    return azure_token, google_token, redirect_uri
+    return azure_token, google_token, redirect_uri, default_provider
 
 
 mcp = FastMCP("email_mcp")
@@ -117,9 +124,9 @@ mcp = FastMCP("email_mcp")
 @assign_doc()
 async def send_email(to, subject, body):
     _validate_email_input(to, subject, body)
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.send_email(to, subject, body)
 
 
@@ -127,18 +134,18 @@ async def send_email(to, subject, body):
 @assign_doc()
 async def draft_email(to: str, subject: str, body: str):
     _validate_email_input(to, subject, body)
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.draft_email(to, subject, body)
 
 
 @mcp.tool()
 @assign_doc()
 async def send_draft(draft_id: str):
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.send_draft(draft_id)
 
 
@@ -146,9 +153,9 @@ async def send_draft(draft_id: str):
 @assign_doc()
 async def read_emails(max_results: int = 5, days_back: int = 5):
     max_results = _validate_max_results(max_results)
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.read_emails(max_results=max_results, days_back=days_back)
 
 
@@ -166,9 +173,9 @@ async def search_emails(
         max_results: int = 10,
 ):
     max_results = _validate_max_results(max_results)
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.search_emails(
         sender, subject, has_attachment, after, before, unread, label, msg_id, max_results
     )
@@ -179,36 +186,36 @@ async def search_emails(
 async def reply_to_email(msg_id: str, body: str):
     if len(body) > MAX_EMAIL_BODY_SIZE:
         raise ValueError(f"Reply body exceeds maximum size of {MAX_EMAIL_BODY_SIZE} bytes")
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.reply_to_email(msg_id, body)
 
 
 @mcp.tool()
 @assign_doc()
 async def delete_email(msg_id: str):
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.delete_email(msg_id)
 
 
 @mcp.tool()
 @assign_doc()
 async def archive_email(msg_id: str):
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.archive_email(msg_id)
 
 
 @mcp.tool()
 @assign_doc()
 async def toggle_label(msg_id: str, label_name: str, action: str = "add"):
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.toggle_label_email(msg_id, label_name, action)
 
 
@@ -233,9 +240,9 @@ async def download_attachment(
             - operation_message: Description of the download result.
             - result: Dict containing filename, filepath (if saved), mimeType, size, and optionally base64 data.
     """
-    azure_token, google_token, redirect_uri = _extract_headers_if_found()
+    azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
     return await email_client.download_attachment(msg_id, attachment_index, save_dir)
 
 
