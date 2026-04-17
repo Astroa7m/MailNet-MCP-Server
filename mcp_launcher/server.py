@@ -317,4 +317,4 @@ if __name__ == "__main__":
     if is_local:
         mcp.run(transport="stdio")
     else:
-        mcp.run(transport="http", host="localhost", port=9111)
+        mcp.run(transport="http", host=os.getenv("MCP_HOST", "localhost"), port=9111)
