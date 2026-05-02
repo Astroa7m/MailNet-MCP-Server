@@ -2,7 +2,11 @@ import asyncio
 import base64
 import os.path
 from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
@@ -80,17 +84,28 @@ class GmailClient(EmailClient):
         return build('gmail', 'v1', credentials=creds)
 
     @staticmethod
-    def prep_message_raw(to, subject, body, original_msg_id=None):
-        message = MIMEText(body)
-        message['to'] = to
-        message['subject'] = subject
+    def prep_message_raw(to, subject, body, original_msg_id=None, attachments=None):
+        if attachments:
+            message = MIMEMultipart()
+            message.attach(MIMEText(body, "plain"))
+            for att in attachments:
+                mime_type = att.get("mime_type", "application/octet-stream")
+                main_type, sub_type = (mime_type.split("/", 1) if "/" in mime_type else ("application", "octet-stream"))
+                part = MIMEBase(main_type, sub_type)
+                part.set_payload(base64.b64decode(att["data"]))
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", f'attachment; filename="{att["filename"]}"')
+                message.attach(part)
+        else:
+            message = MIMEText(body)
 
+        message["to"] = to
+        message["subject"] = subject
         if original_msg_id:
-            message['In-Reply-To'] = original_msg_id
-            message['References'] = original_msg_id
+            message["In-Reply-To"] = original_msg_id
+            message["References"] = original_msg_id
 
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        return raw
+        return base64.urlsafe_b64encode(message.as_bytes()).decode()
 
     @staticmethod
     def extract_attachments(payload):
@@ -150,9 +165,9 @@ class GmailClient(EmailClient):
             print(f"Label fetch failed: {e}")
             return []
 
-    async def send_email(self, to, subject, body):
+    async def send_email(self, to, subject, body, attachments=None):
         try:
-            raw = self.prep_message_raw(to, subject, body)
+            raw = self.prep_message_raw(to, subject, body, attachments=attachments)
             res = await asyncio.to_thread(
                 self.service.users().messages().send(userId='me', body={'raw': raw}).execute)
             result = {self.OP_RESULT: EmailingStatus.SUCCEEDED, self.OP_MESSAGE: self.SEND_EMAIL_SUCCESS_MESSAGE,
@@ -162,14 +177,13 @@ class GmailClient(EmailClient):
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
             return result
 
-    async def draft_email(self, to, subject, body):
+    async def draft_email(self, to, subject, body, attachments=None):
         try:
-            raw = self.prep_message_raw(to, subject, body)
+            raw = self.prep_message_raw(to, subject, body, attachments=attachments)
             draft = {"message": {"raw": raw}}
             res = await asyncio.to_thread(self.service.users().drafts().create(userId='me', body=draft).execute)
             result = {self.OP_RESULT: EmailingStatus.SUCCEEDED,
                       self.OP_MESSAGE: self.DRAFT_EMAIL_SUCCESS_MESSAGE, "result": res}
-
             return result
         except Exception as e:
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
@@ -246,7 +260,7 @@ class GmailClient(EmailClient):
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
             return result
 
-    async def reply_to_email(self, msg_id, body):
+    async def reply_to_email(self, msg_id, body, attachments=None):
         try:
             result = (await self.search_emails(msg_id=msg_id))
             print(f"gotten result\n{result}")
@@ -259,7 +273,8 @@ class GmailClient(EmailClient):
                 to=message_info['sender'],
                 subject="Re: " + message_info['subject'],
                 body=body,
-                original_msg_id=msg_id
+                original_msg_id=msg_id,
+                attachments=attachments,
             )
 
             message = {

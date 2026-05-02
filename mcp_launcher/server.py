@@ -2,9 +2,10 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import aiofiles
+import aiohttp
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
@@ -119,25 +120,56 @@ def _extract_headers_if_found():
 
 mcp = FastMCP("email_mcp")
 
+API_SERVER_URL = os.getenv("API_SERVER_URL", "http://localhost:8002")
+
+
+async def _resolve_attachment_ids(attachment_ids: Optional[List[str]]) -> Optional[List[dict]]:
+    """Fetch attachment data from the API server by file_id."""
+    if not attachment_ids:
+        return None
+    attachments = []
+    async with aiohttp.ClientSession() as session:
+        for file_id in attachment_ids:
+            try:
+                async with session.get(f"{API_SERVER_URL}/attachment/{file_id}") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        attachments.append({
+                            "filename": data["filename"],
+                            "data": data["data"],
+                            "mime_type": data["mimeType"],
+                        })
+            except Exception:
+                pass  # skip unresolvable ids
+    return attachments or None
+
 
 @mcp.tool()
 @assign_doc()
-async def send_email(to, subject, body):
+async def send_email(to: str, subject: str, body: str, attachment_ids: Optional[List[str]] = None):
+    """
+    Send an email. If the user attached files, their file IDs appear as attachment values in the
+    conversation (type=url). Pass those IDs as attachment_ids to include the files in the email.
+    """
     _validate_email_input(to, subject, body)
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
-
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
-    return await email_client.send_email(to, subject, body)
+    attachments = await _resolve_attachment_ids(attachment_ids)
+    return await email_client.send_email(to, subject, body, attachments=attachments)
 
 
 @mcp.tool()
 @assign_doc()
-async def draft_email(to: str, subject: str, body: str):
+async def draft_email(to: str, subject: str, body: str, attachment_ids: Optional[List[str]] = None):
+    """
+    Save an email as draft. If the user attached files, their file IDs appear as attachment values in the
+    conversation (type=url). Pass those IDs as attachment_ids to include the files in the draft.
+    """
     _validate_email_input(to, subject, body)
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
-
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
-    return await email_client.draft_email(to, subject, body)
+    attachments = await _resolve_attachment_ids(attachment_ids)
+    return await email_client.draft_email(to, subject, body, attachments=attachments)
 
 
 @mcp.tool()
@@ -183,13 +215,17 @@ async def search_emails(
 
 @mcp.tool()
 @assign_doc()
-async def reply_to_email(msg_id: str, body: str):
+async def reply_to_email(msg_id: str, body: str, attachment_ids: Optional[List[str]] = None):
+    """
+    Reply to an email. If the user attached files, their file IDs appear as attachment values in the
+    conversation (type=url). Pass those IDs as attachment_ids to include the files in the reply.
+    """
     if len(body) > MAX_EMAIL_BODY_SIZE:
         raise ValueError(f"Reply body exceeds maximum size of {MAX_EMAIL_BODY_SIZE} bytes")
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
-
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
-    return await email_client.reply_to_email(msg_id, body)
+    attachments = await _resolve_attachment_ids(attachment_ids)
+    return await email_client.reply_to_email(msg_id, body, attachments=attachments)
 
 
 @mcp.tool()
@@ -265,7 +301,8 @@ async def load_email_settings() -> EmailSettings:
         return EmailSettings()
 
 
-mcp.tool(load_email_settings)
+if is_local:
+    mcp.tool(load_email_settings)
 
 
 @mcp.tool()

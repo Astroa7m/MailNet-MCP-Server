@@ -234,17 +234,32 @@ class OutlookClient(EmailClient):
         except Exception as e:
             raise RuntimeError(f"Request to {endpoint} failed: {e}") from e
 
-    async def send_email(self, to: str, subject: str, body: str) -> Dict[str, Any]:
-        try:
-            payload = {
-                "message": {
-                    "subject": subject,
-                    "body": {"contentType": "Text", "content": body},
-                    "toRecipients": [{"emailAddress": {"address": to}}]
-                }
+    @staticmethod
+    def _build_attachment_list(attachments):
+        if not attachments:
+            return []
+        return [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": att["filename"],
+                "contentType": att.get("mime_type", "application/octet-stream"),
+                "contentBytes": att["data"],
             }
+            for att in attachments
+        ]
 
-            send_res = await self._request("POST", "/me/sendMail", json=payload)
+    async def send_email(self, to: str, subject: str, body: str, attachments=None) -> Dict[str, Any]:
+        try:
+            message = {
+                "subject": subject,
+                "body": {"contentType": "Text", "content": body},
+                "toRecipients": [{"emailAddress": {"address": to}}],
+            }
+            att_list = self._build_attachment_list(attachments)
+            if att_list:
+                message["attachments"] = att_list
+
+            send_res = await self._request("POST", "/me/sendMail", json={"message": message})
             result = {self.OP_RESULT: EmailingStatus.SUCCEEDED, self.OP_MESSAGE: self.SEND_EMAIL_SUCCESS_MESSAGE,
                       "result": send_res}
             return result
@@ -252,14 +267,18 @@ class OutlookClient(EmailClient):
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
             return result
 
-    async def draft_email(self, to: str, subject: str, body: str) -> Dict[str, Any]:
+    async def draft_email(self, to: str, subject: str, body: str, attachments=None) -> Dict[str, Any]:
         try:
             payload = {
                 "subject": subject,
                 "body": {"contentType": "Text", "content": body},
                 "toRecipients": [{"emailAddress": {"address": to}}],
-                "isDraft": "true"
+                "isDraft": "true",
             }
+            att_list = self._build_attachment_list(attachments)
+            if att_list:
+                payload["attachments"] = att_list
+
             draft_res = await self._request("POST", "/me/messages", json=payload)
             draft_id = {"draftId": draft_res['id']}
             result = {self.OP_RESULT: EmailingStatus.SUCCEEDED, self.OP_MESSAGE: self.DRAFT_EMAIL_SUCCESS_MESSAGE,
@@ -363,9 +382,13 @@ class OutlookClient(EmailClient):
             result = {self.OP_RESULT: EmailingStatus.FAILED, self.OP_MESSAGE: str(e)}
             return result
 
-    async def reply_to_email(self, msg_id: str, body: str) -> Dict[str, Any]:
+    async def reply_to_email(self, msg_id: str, body: str, attachments=None) -> Dict[str, Any]:
         try:
-            draft_resp = await self._request("POST", f"/me/messages/{msg_id}/reply")
+            payload = {"comment": body}
+            att_list = self._build_attachment_list(attachments)
+            if att_list:
+                payload["message"] = {"attachments": att_list}
+            draft_resp = await self._request("POST", f"/me/messages/{msg_id}/reply", json=payload if payload else None)
             result = {self.OP_RESULT: EmailingStatus.SUCCEEDED, self.OP_MESSAGE: self.REPLY_TO_EMAIL_SUCCESS_MESSAGE,
                       "result": draft_resp}
             return result

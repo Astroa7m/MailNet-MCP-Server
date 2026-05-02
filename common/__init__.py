@@ -138,10 +138,14 @@ DOCSTRINGS = {
 
 
 def assign_doc(name=None):
+    is_local = os.getenv("is_local", "")
+
     def decorator(func):
         key = name or func.__name__
-        func.__doc__ = "Before executing this function, you must call load_email_settings tool, to understand how to use and generate correctly.\n" + DOCSTRINGS.get(
-            key, "")
+        doc = DOCSTRINGS.get(key, "")
+        if is_local:
+            doc = "Before executing this function, you must call load_email_settings tool, to understand how to use and generate correctly.\n" + doc
+        func.__doc__ = doc
         return func
 
     return decorator

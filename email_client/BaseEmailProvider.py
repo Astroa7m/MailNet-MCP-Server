@@ -42,12 +42,12 @@ class EmailClient(ABC):
 
     @assign_doc()
     @abstractmethod
-    async def send_email(self, to: str, subject: str, body: str) -> Dict[str, Any]:
+    async def send_email(self, to: str, subject: str, body: str, attachments=None) -> Dict[str, Any]:
         pass
 
     @assign_doc()
     @abstractmethod
-    async def draft_email(self, to: str, subject: str, body: str) -> Dict[str, Any]:
+    async def draft_email(self, to: str, subject: str, body: str, attachments=None) -> Dict[str, Any]:
         pass
 
     @assign_doc()
@@ -78,7 +78,7 @@ class EmailClient(ABC):
 
     @assign_doc()
     @abstractmethod
-    async def reply_to_email(self, msg_id: str, body: str) -> Dict[str, Any]:
+    async def reply_to_email(self, msg_id: str, body: str, attachments=None) -> Dict[str, Any]:
         pass
 
     @assign_doc()
