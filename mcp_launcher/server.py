@@ -183,11 +183,11 @@ async def send_draft(draft_id: str):
 
 @mcp.tool()
 @assign_doc()
-async def read_emails(max_results: int = 5, days_back: int = 5):
+async def read_emails(max_results: int = 5, days_back: int = 5, provider: Optional[str] = None):
     max_results = _validate_max_results(max_results)
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, provider or default_provider)
     return await email_client.read_emails(max_results=max_results, days_back=days_back)
 
 
@@ -203,11 +203,12 @@ async def search_emails(
         label: Optional[str] = None,
         msg_id: Optional[str] = None,
         max_results: int = 10,
+        provider: Optional[str] = None,
 ):
     max_results = _validate_max_results(max_results)
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
-    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
+    email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, provider or default_provider)
     return await email_client.search_emails(
         sender, subject, has_attachment, after, before, unread, label, msg_id, max_results
     )
