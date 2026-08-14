@@ -1,20 +1,38 @@
-# 📬 MailNet MCP Server
+# MailNet MCP Server
 
-MailNet Server is a unified, agentic email orchestration server built for the [Model Context Protocol](https://github.com/modelcontextprotocol/servers). It supports Gmail and Outlook with standardized metadata, secure credential injection, and a rich toolset for assistant-driven workflows. It is the MCP server that powers [MailNet](https://github.com/Astroa7m/MailNet) Mailing Agentic AI.
-
----
-
-## 🚀 Features
-
-- ✅ Unified Gmail + Outlook abstraction
-- ✅ Automatic token refresh and credential hygiene
-- ✅ Standardized base class for provider extension
-- ✅ Agentic email settings endpoint (tone, signature, thread context, etc.)
-- ✅ Modular toolset: send, read, search, label, archive, reply, delete, draft
+MailNet Server is a unified, agentic email orchestration server built for the [Model Context Protocol](https://github.com/modelcontextprotocol/servers). It supports Gmail and Outlook with standardized metadata, secure credential injection, and a rich toolset for assistant-driven workflows. It is the MCP server that powers [MailNet](https://github.com/Astroa7m/MailNet) Mailing Agentic AI, **live at [getmailnet.com](https://getmailnet.com)**.
 
 ---
 
-## 🛠 Installation
+## Features
+
+- Unified Gmail + Outlook abstraction
+- Automatic token refresh and credential hygiene
+- Standardized base class for provider extension
+- Agentic email settings endpoint (tone, signature, thread context, etc.)
+- Modular toolset: send, read, search, label, archive, reply, delete, draft
+
+---
+
+## How it fits into MailNet
+
+In the deployed MailNet stack this server runs as its own container (`mcp`, streamable HTTP on port 9111) and is the only component that talks to mailboxes. Everything email-shaped goes through it:
+
+```
+LangGraph agent (api)  ──┐
+                         ├──>  MCP server :9111  ──>  provider layer  ──>  Gmail API
+Scheduler (APScheduler) ─┘        (this repo)                        └──>  Microsoft Graph
+```
+
+- **Per-request credentials, no stored state.** The agent and the scheduler pass each user's OAuth tokens as encrypted HTTP headers on every call; the server decrypts, refreshes if needed, acts, and forgets. It holds no user database.
+- **One tool surface, two providers.** Tools like `send_email`, `read_emails`, and `search_emails` accept an optional provider parameter; the provider layer hides the differences between the Gmail API and Microsoft Graph.
+- **Standalone by design.** The same server also runs solo for local/Claude Desktop use with token files, as described below — MailNet is one consumer of it, not a requirement.
+
+---
+
+## Installation
+
+> Running the full MailNet application (web UI, agent, and this server together)? Follow the [MailNet repo's Getting started](https://github.com/Astroa7m/MailNet#getting-started) instead; it wires this server up via Docker Compose automatically. The steps below are for running the MCP server standalone (for example with Claude Desktop).
 
 ### 1. Manual Clone & Launch
 
@@ -79,7 +97,7 @@ It will do the following:
 3. Provide that path to `GOOGLE_CREDENTIALS_FILE_PATH` env variable and you are good to go.
 ---
 
-## 🔒 Environment Variables
+## Environment Variables
 
 Check the [Azure Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/azure_auth_guide.md) and [Google Authorization Guide](https://github.com/Astroa7m/MailNet-MCP-Server/blob/main/google_auth_guide.md) to learn how to set up both accounts and get your credentials ready.
 
@@ -102,7 +120,7 @@ It was introduced to make the server flexible to be run over http/s or stdio and
 
 ---
 
-## 🖥 Claude Desktop Integration
+## Claude Desktop Integration
 
 Add the following to your `claude_desktop_config.json`:
 
@@ -132,7 +150,7 @@ Add the following to your `claude_desktop_config.json`:
 ```
 ---
 
-## 🧠 Agentic Email Settings
+## Agentic Email Settings
 
 You can view settings via the `load_email_settings` tool or update them via the `update_email_settings` tool.
 ```
@@ -154,7 +172,7 @@ You can view settings via the `load_email_settings` tool or update them via the 
 ```
 ---
 
-## 📦 Tools Supported
+## Tools Supported
 
 | Tool                  | Description                       |
 |-----------------------|-----------------------------------|
@@ -172,6 +190,6 @@ You can view settings via the `load_email_settings` tool or update them via the 
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 MailNet server is modular and extensible. To add a new provider, subclass the base client and implement the predefined hooks. PRs welcome!
