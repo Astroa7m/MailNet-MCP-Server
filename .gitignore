@@ -6,3 +6,7 @@
 # NOTE: Dockerfile and .dockerignore are intentionally tracked. They were
 # ignored, which meant the file that builds the published image was not in
 # source control and could not be reviewed.
+
+# Python bytecode
+__pycache__/
+*.py[cod]
