@@ -263,7 +263,6 @@ class GmailClient(EmailClient):
     async def reply_to_email(self, msg_id, body, attachments=None):
         try:
             result = (await self.search_emails(msg_id=msg_id))
-            print(f"gotten result\n{result}")
             if result[self.OP_RESULT] == EmailingStatus.SUCCEEDED:
                 message_info = result['result']
             else:
@@ -438,10 +437,11 @@ class GmailClient(EmailClient):
             }
 
             if save_dir:
-                # Decode and save to file
+                # basename() the filename: it comes from third-party attachment
+                # metadata, so it could otherwise traverse out of save_dir.
                 os.makedirs(save_dir, exist_ok=True)
                 file_data = base64.urlsafe_b64decode(file_data_b64)
-                filepath = os.path.join(save_dir, filename)
+                filepath = os.path.join(save_dir, os.path.basename(filename))
 
                 with open(filepath, 'wb') as f:
                     f.write(file_data)

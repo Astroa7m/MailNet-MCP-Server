@@ -1,0 +1,23 @@
+# secrets & tokens
+.env
+email_settings.json
+
+# python
+**/__pycache__/
+**/*.pyc
+
+# IDE / git
+.idea/
+.git/
+.gitignore
+
+# local virtualenvs (a developer venv was shipping inside the published image)
+.venv/
+**/.venv/
+
+# provider credentials and cached tokens
+google_credentials.json
+google_token.json
+azure_token.json
+**/google_token.json
+**/azure_token.json

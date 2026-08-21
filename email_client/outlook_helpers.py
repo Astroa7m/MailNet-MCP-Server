@@ -518,7 +518,7 @@ class OutlookClient(EmailClient):
                 # Decode and save to file
                 os.makedirs(save_dir, exist_ok=True)
                 file_data = base64.b64decode(content_bytes_b64)
-                filepath = os.path.join(save_dir, filename)
+                filepath = os.path.join(save_dir, os.path.basename(filename))
 
                 with open(filepath, 'wb') as f:
                     f.write(file_data)

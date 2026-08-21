@@ -93,7 +93,6 @@ async def create_email_client_instance(azure_token=None, google_token=None, redi
         if google_token and default_provider == "google":
             _email_client = GmailClient(credential_file_path=google_credentials, token_info=google_token)
         elif azure_token:
-            print("Azure token from server\n", azure_token)
             _email_client = OutlookClient(client_id=azure_client_id, client_secret=azure_client_secret,
                                           redirect_uri=redirect_uri,
                                           token_info=azure_token)
@@ -121,6 +120,9 @@ def _extract_headers_if_found():
 mcp = FastMCP("email_mcp")
 
 API_SERVER_URL = os.getenv("API_SERVER_URL", "http://localhost:8002")
+# The attachment route is owner-scoped now; this server calls it machine to
+# machine with no user session, so it presents a shared secret instead.
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
 
 
 async def _resolve_attachment_ids(attachment_ids: Optional[List[str]]) -> Optional[List[dict]]:
@@ -131,7 +133,8 @@ async def _resolve_attachment_ids(attachment_ids: Optional[List[str]]) -> Option
     async with aiohttp.ClientSession() as session:
         for file_id in attachment_ids:
             try:
-                async with session.get(f"{API_SERVER_URL}/attachment/{file_id}") as resp:
+                headers = {"x-internal-secret": INTERNAL_API_SECRET} if INTERNAL_API_SECRET else {}
+                async with session.get(f"{API_SERVER_URL}/attachment/{file_id}", headers=headers) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         attachments.append({
@@ -261,7 +264,6 @@ async def toggle_label(msg_id: str, label_name: str, action: str = "add"):
 async def download_attachment(
         msg_id: str,
         attachment_index: int = 0,
-        save_dir: Optional[str] = None,
 ):
     """
     Downloads an attachment from a specific email message.
@@ -269,7 +271,6 @@ async def download_attachment(
     Args:
         msg_id: The ID of the message containing the attachment.
         attachment_index: The index of the attachment to download (0-based). Defaults to 0 (first attachment).
-        save_dir: Optional directory path to save the attachment. If None, returns base64 data.
 
     Returns:
         dict: A dict containing:
@@ -280,7 +281,11 @@ async def download_attachment(
     azure_token, google_token, redirect_uri, default_provider = _extract_headers_if_found()
 
     email_client = await create_email_client_instance(azure_token, google_token, redirect_uri, default_provider)
-    return await email_client.download_attachment(msg_id, attachment_index, save_dir)
+    # save_dir is deliberately not exposed: it was a free-form path argument the
+    # model could set from untrusted email content, and the filename came from
+    # third-party attachment metadata, so the pair allowed writing anywhere in
+    # the container. The product only uses the base64 return path.
+    return await email_client.download_attachment(msg_id, attachment_index, None)
 
 
 async def load_email_settings() -> EmailSettings:
