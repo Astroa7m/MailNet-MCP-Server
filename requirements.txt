@@ -1,14 +1,26 @@
-uv
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-fastapi
-uvicorn
-fastmcp
-mcp
-msal~=1.34.0
-aiohttp
-python-dotenv~=1.1.1
-aiofiles
-cryptography
-pydantic
+# Pinned to the versions the published image was built and tested with. Only two
+# of these were pinned before, so a rebuild months from now would have resolved
+# different majors than the ones this server was verified against.
+
+uv==0.12.5
+
+# Google (Gmail)
+google-api-python-client==2.198.0
+google-auth-httplib2==0.4.1
+google-auth-oauthlib==1.4.0
+
+# Microsoft (Outlook)
+msal==1.34.0
+
+# MCP server surface
+fastmcp==3.4.7
+mcp==1.29.0
+fastapi==0.141.1
+uvicorn==0.52.3
+
+# Support
+aiohttp==3.14.3
+aiofiles==25.1.0
+cryptography==48.0.1
+pydantic==2.13.4
+python-dotenv==1.1.1
